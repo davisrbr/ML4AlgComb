@@ -16,7 +16,7 @@ def get_dataset(data: str, n: Optional[int] = None, folder = "./", info_str: boo
         - n = 3, 4, 5, or 6 for "schubert"
         - n = 10, 11, or 12 for "mheight"
         - n = 18, 20, 22 for "symmetric_group_char"
-        - n = 8 or 9 for "kl_polynomial"
+        - n = 5,6,7 for "kl_polynomial"
         - n = 10, 11, 12, or 13 for "lattice_path"
         - There are not multiple values of n for the "quiver" and "grassmannian_cluster_algebras" datasetes
     folder (str, optional): Base directory for dataset files. Defaults to "./".
@@ -139,12 +139,6 @@ def get_dataset(data: str, n: Optional[int] = None, folder = "./", info_str: boo
     elif data == "symmetric_group_char":
         assert n in {18, 20, 22}, f"Can't handle n={n}. n must be 18, 20, or 22."
 
-        #if n == 18:
-        #    cutoff = 294
-        #elif n == 20:
-        #    cutoff = 573
-        #elif n == 22:
-        #    cutoff = 1144
         train = [
                 ast.literal_eval(line)
                 for line in open( os.path.join(folder, f"symmetric_group_char/sym_grp_char_{n}_train.txt"), 'r')
@@ -164,6 +158,7 @@ def get_dataset(data: str, n: Optional[int] = None, folder = "./", info_str: boo
         X_train, y_train, X_test, y_test = np.array(X_train), np.array(y_train), np.array(X_test), np.array(y_test)
         min_val = min(np.min(y_train), np.min(y_test))
         y_train, y_test = y_train,  y_test
+        print(y_train[:10])
         print(f"Train set has {len(X_train)} examples")
         print(f"Test set has {len(X_test)} examples")
         print(f"Inputs are sequences of length {input_size} with entries 0 through {num_tokens-1}, which represent two concatenated integer partitions of n={n}.")
@@ -209,15 +204,17 @@ def get_dataset(data: str, n: Optional[int] = None, folder = "./", info_str: boo
         #We filtered out all classes that contained less than 0.01% of the data
         largest_class = 4
 
-        mheight_train = np.loadtxt(f"{base_path}_{n}_train.txt", dtype = str, delimiter = ",")
-        mheight_test = np.loadtxt(f"{base_path}_{n}_test.txt", dtype = str, delimiter = ",")
+        mheight_train = np.loadtxt(f"{base_path}_{n}_train.txt", dtype = str, delimiter = ";")
+        mheight_test = np.loadtxt(f"{base_path}_{n}_test.txt", dtype = str, delimiter = ";")
 
-        X_train, y_train = parse_mheight_data(mheight_train, largest_class = largest_class)
-        X_test, y_test = parse_mheight_data(mheight_test, largest_class = largest_class)
+        X_train, y_train = parse_mheight_data(mheight_train)
+        X_test, y_test = parse_mheight_data(mheight_test)
 
+        num_classes = len(set(y_train+y_test))
+        
         input_size = len(X_train[0])
-        output_size = largest_class +1
-        num_tokens = 2
+        output_size = num_classes
+        num_tokens = n
         print(f"Train set has {len(X_train)} examples")
         print(f"Test set has {len(X_test)} examples")
         print(f"Input sequences are permutations represented by their inversion sequence, which is a binary sequence of length ({n} choose 2)= {input_size}.")
@@ -271,7 +268,7 @@ def get_dataset(data: str, n: Optional[int] = None, folder = "./", info_str: boo
             return (np.array(X_train.reshape(X_train.shape[0], -1)), np.array(y_train), np.array(X_test.reshape(X_test.shape[0], -1)), np.array(y_test), input_size, output_size, num_tokens)
 
     elif data == "kl_polynomial":
-        assert n in {8, 9}, f"Can't handle n={n}. n must be 8, 9, or 10."
+        assert n in {4, 5, 6, 7, 8}, f"Can't handle n={n}. n must be 8, 9, or 10."
 
         path_to_files = os.path.join(folder, "kl-polynomials/")
         train_data, test_data = load_kl_polynomial_data(path_to_files, n)
@@ -279,9 +276,23 @@ def get_dataset(data: str, n: Optional[int] = None, folder = "./", info_str: boo
         # Extracting features and labels from the loaded data
         # Assuming each datum contains three lists: two for features and one for labels
         X_train = np.array([np.concatenate((datum[0], datum[1])) for datum in train_data])
-        y_train = np.array([datum[2][4] for datum in train_data])
+        max_coeff_train = max([len(i[2]) for i in train_data])
+        max_coeff_test = max([len(i[2]) for i in test_data])
+        max_coeff = max(max_coeff_train,max_coeff_test)
+
+        # Pad polynomials with zero coefficients
+        for i in train_data:
+            temp = i[2]
+            temp = temp + (max_coeff - len(temp))*[0]
+            i[2] = temp
+        for i in test_data:
+            temp = i[2]
+            temp = temp + (max_coeff - len(temp))*[0]
+            i[2] = temp
+        
+        y_train = np.array([datum[2] for datum in train_data])
         X_test = np.array([np.concatenate((datum[0], datum[1])) for datum in test_data])
-        y_test = np.array([datum[2][4] for datum in test_data])
+        y_test = np.array([datum[2] for datum in test_data])
 
         input_size = len(X_train[0])  # Assuming all feature vectors are of the same size
         output_size = max(np.max(y_train), np.max(y_test)) + 1
@@ -334,9 +345,13 @@ def get_dataset(data: str, n: Optional[int] = None, folder = "./", info_str: boo
 
 
 
-def parse_mheight_data(mheight_set, largest_class = 4):
-    sequences = [ [int(x) for _, x in enumerate(row.split(';')[0])] for _, row in enumerate(mheight_set) if int(row.split(';')[1]) <= largest_class ]
-    labels = [ int(row.split(';')[1]) for _, row in enumerate(mheight_set) if int(row.split(';')[1]) <= largest_class ]
+def parse_mheight_data(mheight_set):
+    #sequences = [ [int(x) for _, x in enumerate(row.split(';')[0])] for _, row in enumerate(mheight_set) if int(row.split(';')[1]) <= largest_class ]
+    #labels = [ int(row.split(';')[1]) for _, row in enumerate(mheight_set) if int(row.split(';')[1]) <= largest_class ]
+    sequences = [i[0].replace('(', '').replace(')', '') for i in mheight_set]
+    sequences = [i.split(",") for i in sequences]
+    sequences = [[int(j) for j in i] for i in sequences]
+    labels = [int(i[1]) for i in mheight_set]
     return sequences, labels
 
 
@@ -434,9 +449,10 @@ def load_kl_polynomial_data(path_to_files,size):
 
     # Names of data files
 
-    file_names = {8:['eps-s8-klps_train.txt','eps-s8-klps_test.txt'],
-                  9:['eps-s9-klps_train.txt','eps-s9-klps_test.txt'],
-                  10:['eps-s10-klps_train.txt','eps-s10-klps_test.txt'],}
+    file_names = {4:['kl_polynomials_4_train.txt','kl_polynomials_4_test.txt'],
+                  5:['kl_polynomials_5_train.txt','kl_polynomials_5_test.txt'],
+                  6:['kl_polynomials_6_train.txt','kl_polynomials_6_test.txt'],
+                  7:['kl_polynomials_7_train.txt','kl_polynomials_7_test.txt']}
 
     # Lists to store train and test as tuples
     train_data = []
@@ -453,18 +469,15 @@ def load_kl_polynomial_data(path_to_files,size):
             content=file.readline()
             if not content:
                 break
-            content = content.replace(',','')
-            content = content.replace('[','')
-            content = content.replace(' ','')
-            content = content.replace('\n','')
-            content = content.split(']')
-            content = content[:3]
-            content = [list(i) for i in content]
-            content[0] = [int(i) for i in content[0]]
-            content[1] = [int(i) for i in content[1]]
-            content[2] = [int(i) for i in content[2]]
-            content[2] = content[2] + (math.ceil((math.comb(size, 2)-1)/2)-len(content[2]))*[0]
-            datum = content
+            content = content.split(",")
+            perm1 = list(content[0])
+            perm2 = list(content[1])[1:]
+            coeffs = content[2:]
+            coeffs[-1] = coeffs[-1][:-1]
+            perm1 = [int(i) for i in perm1]
+            perm2 = [int(i) for i in perm2]
+            coeffs = [int(i) for i in coeffs]
+            datum = [perm1,perm2,coeffs]
             if k == 0:
                 train_data.append(datum)
             else:
