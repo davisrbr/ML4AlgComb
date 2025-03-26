@@ -15,6 +15,14 @@ Along with the data, we provide official train/test splits, background informati
 <img src="fig-data-visualization.png" alt="Alt text" width="750" height="762" style="display: block; margin-left: auto; margin-right: auto;">
 </center>
 
+
+**Environment installation:**
+
+```bash
+conda create -n ml4alg sage jupyter multiprocess python=3.11
+conda activate ml4alg
+```
+
 **Contributors:**
 - [Herman Chau](https://sites.math.washington.edu/~hchau/) (University of Washington)
 - [Helen Jenne](https://hjenne.github.io) (Pacific Northwest National Laboratory)

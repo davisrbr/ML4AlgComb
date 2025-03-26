@@ -620,7 +620,7 @@ def main():
         print(f"Finished downloading {dataset_name}.")
 
         # Unzip phase: place each dataset into data/dataset_name/
-        data_subfolder = dataset_name / Path("data")
+        data_subfolder = Path("data")
         data_subfolder.mkdir(parents=True, exist_ok=True)
         print(f"Unzipping {filename} into {data_subfolder}...")
 
