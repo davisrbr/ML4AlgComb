@@ -4,6 +4,9 @@ import numpy as np
 import math
 import ast
 from typing import Optional
+import requests
+from pathlib import Path
+import zipfile
 
 def get_dataset(data: str, n: Optional[int] = None, folder = "./", info_str: bool = False):
     """
@@ -519,3 +522,114 @@ def shuffle_data(sequences, labels, s = 32):
     random.shuffle(data)
     sequences, labels = zip(*data)
     return sequences, labels
+
+# A helper function to handle the Google Drive confirmation mechanism for large files.
+def download_file_from_google_drive(file_id, destination):
+    """
+    Downloads a file from Google Drive using its file_id and saves to 'destination'.
+    """
+    URL = "https://docs.google.com/uc?export=download"
+
+    session = requests.Session()
+    response = session.get(URL, params={'id': file_id}, stream=True)
+    token = _get_confirm_token(response)
+
+    if token:
+        params = {'id': file_id, 'confirm': token}
+        response = session.get(URL, params=params, stream=True)
+
+    _save_response_content(response, destination)
+
+def _get_confirm_token(response):
+    """
+    For large files, Google may prompt for confirmation. This function fetches 
+    the confirmation token if present.
+    """
+    for key, value in response.cookies.items():
+        if key.startswith('download_warning'):
+            return value
+    return None
+
+def _save_response_content(response, destination):
+    """
+    Writes the streamed response content to destination.
+    """
+    chunk_size = 32768
+    with open(destination, "wb") as f:
+        for chunk in response.iter_content(chunk_size):
+            if chunk:
+                f.write(chunk)
+
+def main():
+    """
+    Main function to orchestrate the downloads for each dataset, then unzip
+    each archive into its corresponding data/ subfolder.
+    """
+
+    datasets_to_download = {
+        "grassmannian_cluster_algebras": {
+            "id": "1Dd4PAOgm7bAtXSGmQW81OE-O_7dS7qU_", 
+            "filename": "grassmannian_data.zip"
+        },
+        "kazhdan_lusztig_polynomial_coefficients": {
+            "id": "1A9swYSBVM4Y5KAFC52AzVRMVshVz4yyR", 
+            "filename": "kl_polynomials.zip"
+        },
+        "lattice_path_posets": {
+            "id": "1Wm9mtZQjXXQ4rl0TU9KtJ1T4RQaGsJNz", 
+            "filename": "lattice_path_posets_data.zip"
+        },
+        "quiver_mutation_equivalence": {
+            "id": "1UmRLOhNq2mX6s4NQPIgciuGG9HfvrKWC", 
+            "filename": "quiver_mutation_data.zip"
+        },
+        "schubert_polynomial_structure_constants": {
+            "id": "15bERRWWue-3gKSir3hVhfejNTeZJgsl9", 
+            "filename": "schubert_polynomial_coeff.zip"
+        },
+        "weaving_patterns": {
+            "id": "1HsWuHpTkCOtpyTG2dFH49jzkKIZYwKG8", 
+            "filename": "weaving_patterns_data.zip"
+        },
+        "mheight_function": {
+            "id": "1NteiP494xpQ4KzR9dVUaDhNtUPnumeuX", 
+            "filename": "mheight_function_data.zip"
+        },
+        "rsk": {
+            "id": "1CfuxD_XgTefbEduxJnXgXoUOt-GY-smq", 
+            "filename": "rsk.zip"
+        },
+        "symmetric_group_characters": {
+            "id": "15AHAn9NnC7crzG_8BnaH3pp1aOGUUniV", 
+            "filename": "symmetric_group_data.zip"
+        }
+    }
+
+    # Create an output directory for storing .zip files before unzipping
+    output_directory = Path("datasets")
+    output_directory.mkdir(exist_ok=True)
+
+    for dataset_name, info in datasets_to_download.items():
+        file_id = info["id"]
+        filename = info["filename"]
+        zip_destination = output_directory / filename
+
+        # Download phase
+        print(f"Downloading {dataset_name} from Google Drive (file_id={file_id}) to {zip_destination}...")
+        download_file_from_google_drive(file_id, zip_destination)
+        print(f"Finished downloading {dataset_name}.")
+
+        # Unzip phase: place each dataset into data/dataset_name/
+        data_subfolder = dataset_name / Path("data")
+        data_subfolder.mkdir(parents=True, exist_ok=True)
+        print(f"Unzipping {filename} into {data_subfolder}...")
+
+        try:
+            with zipfile.ZipFile(zip_destination, 'r') as zip_ref:
+                zip_ref.extractall(data_subfolder)
+            print(f"Extraction complete for {dataset_name}.\n")
+        except zipfile.BadZipFile:
+            print(f"[ERROR] {filename} is not a valid zip file - you will need to download the data manually.\n")
+
+if __name__ == "__main__":
+    main()
